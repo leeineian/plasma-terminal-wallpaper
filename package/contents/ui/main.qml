@@ -232,8 +232,7 @@ WallpaperItem {
             }
 
             property bool shiftPressed: false
-            property int clickCount: 1
-            property var lastClickTime: 0
+            property var lastDoubleClickTime: 0
 
             onPressed: (mouse) => {
                 mainScope.forceActiveFocus();
@@ -246,16 +245,7 @@ WallpaperItem {
                 } else {
                     if (mouse.button === Qt.LeftButton) {
                         var now = Date.now();
-                        if (now - lastClickTime < 300) {
-                            clickCount++;
-                        } else {
-                            clickCount = 1;
-                        }
-                        lastClickTime = now;
-
-                        if (clickCount === 2) {
-                            terminalBackend.selectWord(mouse.x, mouse.y);
-                        } else if (clickCount >= 3) {
+                        if (now - lastDoubleClickTime < 300) {
                             terminalBackend.selectLine(mouse.x, mouse.y);
                         } else {
                             terminalBackend.startSelection(mouse.x, mouse.y);
@@ -279,9 +269,23 @@ WallpaperItem {
                     mouse.accepted = true;
                 } else {
                     if (mouse.button === Qt.LeftButton) {
-                        if (clickCount === 1) {
-                            terminalBackend.endSelection();
-                        }
+                        terminalBackend.endSelection();
+                        mouse.accepted = true;
+                    }
+                }
+            }
+
+            onDoubleClicked: (mouse) => {
+                if (terminalBackend.isMouseTrackingActive() && !(mouse.modifiers & Qt.ShiftModifier)) {
+                    var btn = 0;
+                    if (mouse.button === Qt.RightButton) btn = 2;
+                    else if (mouse.button === Qt.MiddleButton) btn = 1;
+                    terminalBackend.sendMouseEvent(0, btn, mouse.x, mouse.y, true);
+                    mouse.accepted = true;
+                } else {
+                    if (mouse.button === Qt.LeftButton) {
+                        terminalBackend.selectWord(mouse.x, mouse.y);
+                        lastDoubleClickTime = Date.now();
                         mouse.accepted = true;
                     }
                 }
