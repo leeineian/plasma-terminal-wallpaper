@@ -1,0 +1,28 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "user@example.com",
+                "Name": "Terminal Wallpaper Developer"
+            }
+        ],
+        "BugReportUrl": "",
+        "Category": "",
+        "Description": "A fully functional interactive terminal as your desktop wallpaper",
+        "Icon": "utilities-terminal",
+        "Id": "com.wallpaper.terminal",
+        "License": "MIT",
+        "Name": "Terminal Wallpaper",
+        "Version": "1.0.0",
+        "Website": ""
+    },
+    "Keywords": [
+        "terminal",
+        "shell",
+        "wallpaper",
+        "interactive"
+    ],
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

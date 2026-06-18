@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+  <kcfgfile name=""/>
+
+  <group name="General">
+    <entry name="FontName" type="String">
+      <label>Terminal Font Family</label>
+      <default>Monospace</default>
+    </entry>
+    <entry name="FontSize" type="Int">
+      <label>Terminal Font Size</label>
+      <default>13</default>
+    </entry>
+    <entry name="PaddingLeft" type="Int">
+      <label>Padding Left</label>
+      <default>0</default>
+    </entry>
+    <entry name="PaddingRight" type="Int">
+      <label>Padding Right</label>
+      <default>0</default>
+    </entry>
+    <entry name="PaddingTop" type="Int">
+      <label>Padding Top</label>
+      <default>0</default>
+    </entry>
+    <entry name="PaddingBottom" type="Int">
+      <label>Padding Bottom</label>
+      <default>0</default>
+    </entry>
+  </group>
+</kcfg>
