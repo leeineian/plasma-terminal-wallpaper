@@ -232,7 +232,6 @@ WallpaperItem {
             }
 
             property bool shiftPressed: false
-            property var lastDoubleClickTime: 0
 
             onPressed: (mouse) => {
                 mainScope.forceActiveFocus();
@@ -244,12 +243,7 @@ WallpaperItem {
                     mouse.accepted = true;
                 } else {
                     if (mouse.button === Qt.LeftButton) {
-                        var now = Date.now();
-                        if (now - lastDoubleClickTime < 300) {
-                            terminalBackend.selectLine(mouse.x, mouse.y);
-                        } else {
-                            terminalBackend.startSelection(mouse.x, mouse.y);
-                        }
+                        terminalBackend.startSelection(mouse.x, mouse.y);
                         mouse.accepted = true;
                     } else if (mouse.button === Qt.MiddleButton) {
                         terminalBackend.pasteFromSelection();
@@ -270,22 +264,6 @@ WallpaperItem {
                 } else {
                     if (mouse.button === Qt.LeftButton) {
                         terminalBackend.endSelection();
-                        mouse.accepted = true;
-                    }
-                }
-            }
-
-            onDoubleClicked: (mouse) => {
-                if (terminalBackend.isMouseTrackingActive() && !(mouse.modifiers & Qt.ShiftModifier)) {
-                    var btn = 0;
-                    if (mouse.button === Qt.RightButton) btn = 2;
-                    else if (mouse.button === Qt.MiddleButton) btn = 1;
-                    terminalBackend.sendMouseEvent(0, btn, mouse.x, mouse.y, true);
-                    mouse.accepted = true;
-                } else {
-                    if (mouse.button === Qt.LeftButton) {
-                        terminalBackend.selectWord(mouse.x, mouse.y);
-                        lastDoubleClickTime = Date.now();
                         mouse.accepted = true;
                     }
                 }

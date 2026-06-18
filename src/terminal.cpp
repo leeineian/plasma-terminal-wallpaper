@@ -9,6 +9,7 @@
 #include <QFontMetricsF>
 #include <QDebug>
 #include <QGuiApplication>
+#include <QStyleHints>
 #include <QClipboard>
 #include <QChar>
 #include <algorithm>
@@ -623,6 +624,21 @@ void Terminal::sendMouseEvent(int type, int button, int x, int y, bool isPressed
 }
 
 void Terminal::startSelection(double x, double y) {
+    if (m_clickTimer.isValid() && m_clickTimer.elapsed() < QGuiApplication::styleHints()->mouseDoubleClickInterval()) {
+        m_clickCount++;
+    } else {
+        m_clickCount = 1;
+    }
+    m_clickTimer.start();
+
+    if (m_clickCount == 2) {
+        selectWord(x, y);
+        return;
+    } else if (m_clickCount >= 3) {
+        selectLine(x, y);
+        return;
+    }
+
     clearSelection();
     SelectionPoint pt = cellAt(x, y);
     pt.col = std::min(pt.col, getLineLength(pt.row));

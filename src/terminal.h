@@ -5,6 +5,7 @@
 #include <QVariantList>
 #include <QSocketNotifier>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <vector>
 #include <string>
 #include <vterm.h>
@@ -125,6 +126,8 @@ private:
     bool m_isSelecting = false;
     SelectionPoint m_selectionStart{0, 0};
     SelectionPoint m_selectionEnd{0, 0};
+    QElapsedTimer m_clickTimer;
+    int m_clickCount = 0;
 
     QString m_colorMap[16];
     
