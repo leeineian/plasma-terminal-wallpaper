@@ -631,6 +631,8 @@ void Terminal::startSelection(double x, double y) {
     }
     m_clickTimer.start();
 
+    qDebug() << "startSelection called: x =" << x << "y =" << y << "clickCount =" << m_clickCount;
+
     if (m_clickCount == 2) {
         selectWord(x, y);
         return;
@@ -801,10 +803,10 @@ QString Terminal::getSelectedText() const {
 
     for (int r = selStart.row; r <= selEnd.row; ++r) {
         int startC = (r == selStart.row) ? selStart.col : 0;
-        int endC = (r == selEnd.row) ? selEnd.col : (m_cols - 1);
+        int endC = (r == selEnd.row) ? selEnd.col : m_cols;
 
         QString lineText;
-        for (int c = startC; c <= endC; ++c) {
+        for (int c = startC; c < endC; ++c) {
             VTermScreenCell cell = {};
             bool gotCell = false;
 
@@ -925,7 +927,11 @@ void Terminal::selectWord(double x, double y) {
     clearSelection();
     SelectionPoint pt = cellAt(x, y);
     int lineLen = getLineLength(pt.row);
-    if (pt.col >= lineLen) return;
+    qDebug() << "selectWord: pt.col =" << pt.col << "pt.row =" << pt.row << "lineLen =" << lineLen;
+    if (pt.col >= lineLen) {
+        qDebug() << "selectWord: clicked column is beyond line length, returning";
+        return;
+    }
 
     int startCol = pt.col;
     int endCol = pt.col;
@@ -939,7 +945,9 @@ void Terminal::selectWord(double x, double y) {
     while (startCol > 0) {
         VTermScreenCell cell = {};
         if (getCellAt(pt.row, startCol - 1, &cell)) {
-            if (isWordChar(cell.chars[0])) {
+            bool isWord = isWordChar(cell.chars[0]);
+            qDebug() << "Left check col:" << (startCol - 1) << "char:" << (char)cell.chars[0] << "code:" << cell.chars[0] << "isWord:" << isWord;
+            if (isWord) {
                 startCol--;
             } else {
                 break;
@@ -952,7 +960,9 @@ void Terminal::selectWord(double x, double y) {
     while (endCol < lineLen - 1) {
         VTermScreenCell cell = {};
         if (getCellAt(pt.row, endCol + 1, &cell)) {
-            if (isWordChar(cell.chars[0])) {
+            bool isWord = isWordChar(cell.chars[0]);
+            qDebug() << "Right check col:" << (endCol + 1) << "char:" << (char)cell.chars[0] << "code:" << cell.chars[0] << "isWord:" << isWord;
+            if (isWord) {
                 endCol++;
             } else {
                 break;
@@ -966,6 +976,7 @@ void Terminal::selectWord(double x, double y) {
     m_selectionEnd = { endCol + 1, pt.row };
     m_hasSelection = true;
     m_isSelecting = false;
+    qDebug() << "selectWord: selection set from" << startCol << "to" << (endCol + 1);
     update();
     endSelection();
 }

@@ -234,6 +234,7 @@ WallpaperItem {
             property bool shiftPressed: false
 
             onPressed: (mouse) => {
+                console.log("QML onPressed: button =", mouse.button, "clickCount =", mouse.clickCount, "x =", mouse.x, "y =", mouse.y);
                 mainScope.forceActiveFocus();
                 if (terminalBackend.isMouseTrackingActive() && !(mouse.modifiers & Qt.ShiftModifier)) {
                     var btn = 0;
