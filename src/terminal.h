@@ -52,6 +52,8 @@ public:
     Q_INVOKABLE void pasteFromSelection();
     Q_INVOKABLE void pasteFromClipboard();
     Q_INVOKABLE bool isPositionHoverable(double x, double y) const;
+    Q_INVOKABLE void selectWord(double x, double y);
+    Q_INVOKABLE void selectLine(double x, double y);
 
     void writeToPty(const char *s, size_t len);
 
@@ -78,6 +80,7 @@ private:
     SelectionPoint cellAt(double x, double y) const;
     bool isCellSelected(int col, int row) const;
     int getLineLength(int row) const;
+    bool getCellAt(int r, int c, VTermScreenCell *cell) const;
     QString getSelectedText() const;
 
     void initPty();

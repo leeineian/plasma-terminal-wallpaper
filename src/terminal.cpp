@@ -886,3 +886,85 @@ bool Terminal::isPositionHoverable(double x, double y) const {
     return col < lineLen;
 }
 
+bool Terminal::getCellAt(int r, int c, VTermScreenCell *cell) const {
+    int historySize = m_useAltScreen ? 0 : static_cast<int>(m_history.size());
+    if (r < historySize) {
+        if (r >= 0 && r < static_cast<int>(m_history.size())) {
+            const auto &histLine = m_history[r];
+            if (c >= 0 && c < static_cast<int>(histLine.size())) {
+                *cell = histLine[c];
+                return true;
+            }
+        }
+    } else {
+        VTermPos pos = { r - historySize, c };
+        if (vterm_screen_get_cell(m_vts, pos, cell)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Terminal::selectWord(double x, double y) {
+    clearSelection();
+    SelectionPoint pt = cellAt(x, y);
+    int lineLen = getLineLength(pt.row);
+    if (pt.col >= lineLen) return;
+
+    int startCol = pt.col;
+    int endCol = pt.col;
+
+    auto isWordChar = [](uint32_t cp) {
+        if (cp == 0 || QChar(cp).isSpace()) return false;
+        QString wordSplitters = " \t\n`~!@#$%^&*()-_=+[{]}\\|;:'\",.<>/?";
+        return !wordSplitters.contains(QChar(cp));
+    };
+
+    while (startCol > 0) {
+        VTermScreenCell cell = {};
+        if (getCellAt(pt.row, startCol - 1, &cell)) {
+            if (isWordChar(cell.chars[0])) {
+                startCol--;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    while (endCol < lineLen - 1) {
+        VTermScreenCell cell = {};
+        if (getCellAt(pt.row, endCol + 1, &cell)) {
+            if (isWordChar(cell.chars[0])) {
+                endCol++;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    m_selectionStart = { startCol, pt.row };
+    m_selectionEnd = { endCol + 1, pt.row };
+    m_hasSelection = true;
+    m_isSelecting = false;
+    update();
+    endSelection();
+}
+
+void Terminal::selectLine(double x, double y) {
+    clearSelection();
+    SelectionPoint pt = cellAt(x, y);
+    int lineLen = getLineLength(pt.row);
+    
+    m_selectionStart = { 0, pt.row };
+    m_selectionEnd = { lineLen, pt.row };
+    m_hasSelection = true;
+    m_isSelecting = false;
+    update();
+    endSelection();
+}
+
+

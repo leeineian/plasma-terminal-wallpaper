@@ -92,6 +92,31 @@ WallpaperItem {
         anchors.fill: parent
         focus: true
 
+        DropArea {
+            anchors.fill: parent
+            onDropped: (drop) => {
+                if (drop.hasUrls) {
+                    var urlsText = "";
+                    for (var i = 0; i < drop.urls.length; i++) {
+                        var url = drop.urls[i];
+                        var localPath = url.toLocalFile ? url.toLocalFile() : url.toString();
+                        if (localPath.startsWith("file://")) {
+                            localPath = localPath.substring(7);
+                        }
+                        localPath = decodeURIComponent(localPath);
+                        localPath = localPath.replace(/ /g, "\\ ");
+                        
+                        if (urlsText !== "") {
+                            urlsText += " ";
+                        }
+                        urlsText += localPath;
+                    }
+                    terminalBackend.sendInput(urlsText);
+                    mainScope.forceActiveFocus();
+                }
+            }
+        }
+
         // Capture keyboard events and forward to native terminal
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Shift) {
@@ -207,6 +232,8 @@ WallpaperItem {
             }
 
             property bool shiftPressed: false
+            property int clickCount: 1
+            property var lastClickTime: 0
 
             onPressed: (mouse) => {
                 mainScope.forceActiveFocus();
@@ -218,7 +245,21 @@ WallpaperItem {
                     mouse.accepted = true;
                 } else {
                     if (mouse.button === Qt.LeftButton) {
-                        terminalBackend.startSelection(mouse.x, mouse.y);
+                        var now = Date.now();
+                        if (now - lastClickTime < 300) {
+                            clickCount++;
+                        } else {
+                            clickCount = 1;
+                        }
+                        lastClickTime = now;
+
+                        if (clickCount === 2) {
+                            terminalBackend.selectWord(mouse.x, mouse.y);
+                        } else if (clickCount >= 3) {
+                            terminalBackend.selectLine(mouse.x, mouse.y);
+                        } else {
+                            terminalBackend.startSelection(mouse.x, mouse.y);
+                        }
                         mouse.accepted = true;
                     } else if (mouse.button === Qt.MiddleButton) {
                         terminalBackend.pasteFromSelection();
@@ -238,7 +279,9 @@ WallpaperItem {
                     mouse.accepted = true;
                 } else {
                     if (mouse.button === Qt.LeftButton) {
-                        terminalBackend.endSelection();
+                        if (clickCount === 1) {
+                            terminalBackend.endSelection();
+                        }
                         mouse.accepted = true;
                     }
                 }
