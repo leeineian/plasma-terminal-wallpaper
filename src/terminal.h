@@ -17,6 +17,9 @@ class Terminal : public QQuickPaintedItem {
     Q_PROPERTY(bool isConnected READ isConnected NOTIFY isConnectedChanged)
     Q_PROPERTY(bool terminalFocused READ terminalFocused WRITE setTerminalFocused NOTIFY terminalFocusedChanged)
     Q_PROPERTY(bool useAltScreen READ useAltScreen NOTIFY useAltScreenChanged)
+    Q_PROPERTY(int scrollOffset READ scrollOffset WRITE setScrollOffset NOTIFY scrollOffsetChanged)
+    Q_PROPERTY(int historySize READ historySize NOTIFY historySizeChanged)
+    Q_PROPERTY(int rows READ rows NOTIFY rowsChanged)
 
 public:
     explicit Terminal(QQuickItem *parent = nullptr);
@@ -34,6 +37,12 @@ public:
     void setTerminalFocused(bool focused);
 
     bool useAltScreen() const { return m_useAltScreen; }
+
+    int scrollOffset() const { return m_scrollOffset; }
+    void setScrollOffset(int offset);
+
+    int historySize() const { return static_cast<int>(m_history.size()); }
+    int rows() const { return m_rows; }
 
     void paint(QPainter *painter) override;
 
@@ -64,6 +73,9 @@ signals:
     void isConnectedChanged();
     void terminalFocusedChanged();
     void useAltScreenChanged();
+    void scrollOffsetChanged();
+    void historySizeChanged();
+    void rowsChanged();
     void bell();
 
 protected:

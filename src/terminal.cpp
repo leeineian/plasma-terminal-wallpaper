@@ -140,6 +140,7 @@ int Terminal::cb_resize(int rows, int cols, void *user) {
     Terminal *term = static_cast<Terminal*>(user);
     term->m_rows = rows;
     term->m_cols = cols;
+    emit term->rowsChanged();
     return 1;
 }
 
@@ -150,6 +151,7 @@ int Terminal::cb_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
     if (term->m_history.size() > 1000) {
         term->m_history.erase(term->m_history.begin());
     }
+    emit term->historySizeChanged();
     return 1;
 }
 
@@ -169,12 +171,14 @@ int Terminal::cb_sb_popline(int cols, VTermScreenCell *cells, void *user) {
         cells[i].bg.type = VTERM_COLOR_DEFAULT_BG;
         cells[i].attrs = VTermScreenCellAttrs{};
     }
+    emit term->historySizeChanged();
     return 1;
 }
 
 int Terminal::cb_sb_clear(void *user) {
     Terminal *term = static_cast<Terminal*>(user);
     term->m_history.clear();
+    emit term->historySizeChanged();
     return 1;
 }
 
@@ -263,7 +267,11 @@ void Terminal::onPtyDataAvailable() {
     char buf[4096];
     ssize_t n = read(m_ptmxFd, buf, sizeof(buf));
     if (n > 0) {
+        int oldOffset = m_scrollOffset;
         m_scrollOffset = 0;
+        if (oldOffset != 0) {
+            emit scrollOffsetChanged();
+        }
         if (m_vt) {
             vterm_input_write(m_vt, buf, n);
             vterm_screen_flush_damage(m_vts);
@@ -290,7 +298,11 @@ void Terminal::sendInput(const QString &input) {
         recreateShell();
         return;
     }
+    int oldOffset = m_scrollOffset;
     m_scrollOffset = 0;
+    if (oldOffset != 0) {
+        emit scrollOffsetChanged();
+    }
     if (m_ptmxFd >= 0) {
         QByteArray bytes = input.toUtf8();
         ssize_t w = write(m_ptmxFd, bytes.constData(), bytes.size());
@@ -316,7 +328,9 @@ void Terminal::recreateShell() {
 
     m_cx = 0;
     m_cy = 0;
+    int oldOffset = m_scrollOffset;
     m_scrollOffset = 0;
+    bool hadHistory = !m_history.empty();
     m_history.clear();
     m_useAltScreen = false;
     m_shellExited = false;
@@ -324,6 +338,12 @@ void Terminal::recreateShell() {
     m_mouseTrackingDrag = false;
     m_mouseSgrMode = false;
     emit useAltScreenChanged();
+    if (oldOffset != 0) {
+        emit scrollOffsetChanged();
+    }
+    if (hadHistory) {
+        emit historySizeChanged();
+    }
 
     if (m_vt) {
         vterm_screen_reset(m_vts, 1);
@@ -411,6 +431,7 @@ void Terminal::setTheme(const QString &bgHex, const QString &fgHex, bool isDark)
 
 void Terminal::scrollLines(int lines) {
     if (m_useAltScreen) return;
+    int oldOffset = m_scrollOffset;
     m_scrollOffset += lines;
     if (m_scrollOffset < 0) {
         m_scrollOffset = 0;
@@ -419,7 +440,22 @@ void Terminal::scrollLines(int lines) {
     if (m_scrollOffset > maxScroll) {
         m_scrollOffset = maxScroll;
     }
+    if (oldOffset != m_scrollOffset) {
+        emit scrollOffsetChanged();
+    }
     update();
+}
+
+void Terminal::setScrollOffset(int offset) {
+    if (m_useAltScreen) return;
+    int maxScroll = static_cast<int>(m_history.size());
+    if (offset < 0) offset = 0;
+    if (offset > maxScroll) offset = maxScroll;
+    if (m_scrollOffset != offset) {
+        m_scrollOffset = offset;
+        emit scrollOffsetChanged();
+        update();
+    }
 }
 
 QString Terminal::getColorHex(const VTermColor &color) {
@@ -435,6 +471,271 @@ QString Terminal::getColorHex(const VTermColor &color) {
         return QString(buf);
     }
     return QString();
+}
+
+static bool drawCustomBoxDrawing(QPainter *painter, uint32_t cp, const QRectF &cellRect, const QColor &fgColor) {
+    if (cp < 0x2500 || cp > 0x257F) return false;
+
+    int t = 0, r = 0, b = 0, l = 0;
+
+    switch (cp) {
+        case 0x2500: case 0x2504: case 0x2508: l = r = 1; break;
+        case 0x2501: case 0x2505: case 0x2509: l = r = 2; break;
+        case 0x2502: case 0x2506: case 0x250A: t = b = 1; break;
+        case 0x2503: case 0x2507: case 0x250B: t = b = 2; break;
+        case 0x250C: b = r = 1; break;
+        case 0x250D: b = 2; r = 1; break;
+        case 0x250E: b = 1; r = 2; break;
+        case 0x250F: b = 2; r = 2; break;
+        case 0x2510: b = l = 1; break;
+        case 0x2511: b = 2; l = 1; break;
+        case 0x2512: b = 1; l = 2; break;
+        case 0x2513: b = 2; l = 2; break;
+        case 0x2514: t = r = 1; break;
+        case 0x2515: t = 2; r = 1; break;
+        case 0x2516: t = 1; r = 2; break;
+        case 0x2517: t = 2; r = 2; break;
+        case 0x2518: t = l = 1; break;
+        case 0x2519: t = 2; l = 1; break;
+        case 0x251A: t = 1; l = 2; break;
+        case 0x251B: t = 2; l = 2; break;
+        case 0x251C: t = b = r = 1; break;
+        case 0x251D: t = b = 1; r = 2; break;
+        case 0x251E: t = 2; b = 1; r = 1; break;
+        case 0x251F: t = 1; b = 2; r = 1; break;
+        case 0x2520: t = b = 2; r = 1; break;
+        case 0x2521: t = 2; b = 1; r = 2; break;
+        case 0x2522: t = 1; b = 2; r = 2; break;
+        case 0x2523: t = b = r = 2; break;
+        case 0x2524: t = b = l = 1; break;
+        case 0x2525: t = b = 1; l = 2; break;
+        case 0x2526: t = 2; b = 1; l = 1; break;
+        case 0x2527: t = 1; b = 2; l = 1; break;
+        case 0x2528: t = b = 2; l = 1; break;
+        case 0x2529: t = 2; b = 1; l = 2; break;
+        case 0x252A: t = 1; b = 2; l = 2; break;
+        case 0x252B: t = b = l = 2; break;
+        case 0x252C: b = l = r = 1; break;
+        case 0x252D: b = 1; l = 2; r = 1; break;
+        case 0x252E: b = 1; l = 1; r = 2; break;
+        case 0x252F: b = 1; l = r = 2; break;
+        case 0x2530: b = 2; l = r = 1; break;
+        case 0x2531: b = 2; l = 2; r = 1; break;
+        case 0x2532: b = 2; l = 1; r = 2; break;
+        case 0x2533: b = l = r = 2; break;
+        case 0x2534: t = l = r = 1; break;
+        case 0x2535: t = 1; l = 2; r = 1; break;
+        case 0x2536: t = 1; l = 1; r = 2; break;
+        case 0x2537: t = 1; l = r = 2; break;
+        case 0x2538: t = 2; l = r = 1; break;
+        case 0x2539: t = 2; l = 2; r = 1; break;
+        case 0x253A: t = 2; l = 1; r = 2; break;
+        case 0x253B: t = l = r = 2; break;
+        case 0x253C: t = b = l = r = 1; break;
+        case 0x253D: t = b = 1; l = 2; r = 1; break;
+        case 0x253E: t = b = 1; l = 1; r = 2; break;
+        case 0x253F: t = b = 1; l = r = 2; break;
+        case 0x2540: t = b = 2; l = r = 1; break;
+        case 0x2541: t = 2; b = 1; l = r = 1; break;
+        case 0x2542: t = 1; b = 2; l = r = 1; break;
+        case 0x2543: t = b = 2; l = r = 1; break;
+        case 0x2544: t = b = 1; l = 2; r = 1; break;
+        case 0x254B: t = b = l = r = 2; break;
+        case 0x2550: l = r = 3; break;
+        case 0x2551: t = b = 3; break;
+        case 0x2552: b = 1; r = 3; break;
+        case 0x2553: b = 3; r = 1; break;
+        case 0x2554: b = r = 3; break;
+        case 0x2555: b = 1; l = 3; break;
+        case 0x2556: b = 3; l = 1; break;
+        case 0x2557: b = l = 3; break;
+        case 0x2558: t = 1; r = 3; break;
+        case 0x2559: t = 3; r = 1; break;
+        case 0x255A: t = r = 3; break;
+        case 0x255B: t = 1; l = 3; break;
+        case 0x255C: t = 3; l = 1; break;
+        case 0x255D: t = l = 3; break;
+        case 0x255E: t = b = 1; r = 3; break;
+        case 0x255F: t = b = 3; r = 1; break;
+        case 0x2560: t = b = r = 3; break;
+        case 0x2561: t = b = 1; l = 3; break;
+        case 0x2562: t = b = 3; l = 1; break;
+        case 0x2563: t = b = l = 3; break;
+        case 0x2564: b = 1; l = r = 3; break;
+        case 0x2565: b = 3; l = r = 1; break;
+        case 0x2566: b = l = r = 3; break;
+        case 0x2567: t = 1; l = r = 3; break;
+        case 0x2568: t = 3; l = r = 1; break;
+        case 0x2569: t = l = r = 3; break;
+        case 0x256A: t = b = 1; l = r = 3; break;
+        case 0x256B: t = b = 3; l = r = 1; break;
+        case 0x256C: t = b = l = r = 3; break;
+        case 0x2574: l = 1; break;
+        case 0x2575: t = 1; break;
+        case 0x2576: r = 1; break;
+        case 0x2577: b = 1; break;
+        case 0x2578: l = 2; break;
+        case 0x2579: t = 2; break;
+        case 0x257A: r = 2; break;
+        case 0x257B: b = 2; break;
+        case 0x257C: l = 1; r = 2; break;
+        case 0x257D: t = 1; b = 2; break;
+        case 0x257E: l = 2; r = 1; break;
+        case 0x257F: t = 2; b = 1; break;
+        default:
+            if (cp >= 0x253C && cp <= 0x254B) {
+                t = b = l = r = (cp >= 0x2543) ? 2 : 1;
+            } else if (cp >= 0x251C && cp <= 0x2523) {
+                t = b = r = (cp >= 0x2520) ? 2 : 1;
+            } else if (cp >= 0x2524 && cp <= 0x252B) {
+                t = b = l = (cp >= 0x2528) ? 2 : 1;
+            } else if (cp >= 0x252C && cp <= 0x2533) {
+                b = l = r = (cp >= 0x2530) ? 2 : 1;
+            } else if (cp >= 0x2534 && cp <= 0x253B) {
+                t = l = r = (cp >= 0x2538) ? 2 : 1;
+            } else {
+                return false;
+            }
+            break;
+    }
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, false);
+
+    double w = cellRect.width();
+    double h = cellRect.height();
+    double cx = cellRect.left() + w / 2.0;
+    double cy = cellRect.top() + h / 2.0;
+
+    double lightW = 1.0;
+    double heavyW = 3.0;
+
+    auto drawSegment = [&](double x1, double y1, double x2, double y2, int style) {
+        if (style == 0) return;
+        if (style == 3) {
+            double doubleOffset = 1.5;
+            painter->setPen(QPen(fgColor, 1.0));
+            if (x1 == x2) {
+                painter->drawLine(QPointF(x1 - doubleOffset, y1), QPointF(x2 - doubleOffset, y2));
+                painter->drawLine(QPointF(x1 + doubleOffset, y1), QPointF(x2 + doubleOffset, y2));
+            } else {
+                painter->drawLine(QPointF(x1, y1 - doubleOffset), QPointF(x2, y2 - doubleOffset));
+                painter->drawLine(QPointF(x1, y1 + doubleOffset), QPointF(x2, y2 + doubleOffset));
+            }
+        } else {
+            double width = (style == 2) ? heavyW : lightW;
+            painter->setPen(QPen(fgColor, width, Qt::SolidLine, Qt::FlatCap));
+            painter->drawLine(QPointF(x1, y1), QPointF(x2, y2));
+        }
+    };
+
+    drawSegment(cx, cy, cx, cellRect.top(), t);
+    drawSegment(cx, cy, cx, cellRect.bottom(), b);
+    drawSegment(cx, cy, cellRect.left(), cy, l);
+    drawSegment(cx, cy, cellRect.right(), cy, r);
+
+    painter->restore();
+    return true;
+}
+
+static bool drawCustomBlockElement(QPainter *painter, uint32_t cp, const QRectF &cellRect, const QColor &fgColor) {
+    if (cp < 0x2580 || cp > 0x259F) return false;
+
+    painter->save();
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(fgColor);
+
+    double w = cellRect.width();
+    double h = cellRect.height();
+    double x = cellRect.left();
+    double y = cellRect.top();
+
+    switch (cp) {
+        case 0x2580: // Upper half block ▀
+            painter->drawRect(QRectF(x, y, w, h / 2.0));
+            break;
+        case 0x2581: // Lower 1/8
+            painter->drawRect(QRectF(x, y + h * 7.0/8.0, w, h / 8.0));
+            break;
+        case 0x2582: // Lower 1/4
+            painter->drawRect(QRectF(x, y + h * 3.0/4.0, w, h / 4.0));
+            break;
+        case 0x2583: // Lower 3/8
+            painter->drawRect(QRectF(x, y + h * 5.0/8.0, w, h * 3.0/8.0));
+            break;
+        case 0x2584: // Lower half block ▄
+            painter->drawRect(QRectF(x, y + h / 2.0, w, h / 2.0));
+            break;
+        case 0x2585: // Lower 5/8
+            painter->drawRect(QRectF(x, y + h * 3.0/8.0, w, h * 5.0/8.0));
+            break;
+        case 0x2586: // Lower 3/4
+            painter->drawRect(QRectF(x, y + h / 4.0, w, h * 3.0/4.0));
+            break;
+        case 0x2587: // Lower 7/8
+            painter->drawRect(QRectF(x, y + h / 8.0, w, h * 7.0/8.0));
+            break;
+        case 0x2588: // Full block █
+            painter->drawRect(cellRect);
+            break;
+        case 0x2589: // Left 7/8
+            painter->drawRect(QRectF(x, y, w * 7.0/8.0, h));
+            break;
+        case 0x258A: // Left 3/4
+            painter->drawRect(QRectF(x, y, w * 3.0/4.0, h));
+            break;
+        case 0x258B: // Left 5/8
+            painter->drawRect(QRectF(x, y, w * 5.0/8.0, h));
+            break;
+        case 0x258C: // Left half block ▌
+            painter->drawRect(QRectF(x, y, w / 2.0, h));
+            break;
+        case 0x258D: // Left 3/8
+            painter->drawRect(QRectF(x, y, w * 3.0/8.0, h));
+            break;
+        case 0x258E: // Left 1/4
+            painter->drawRect(QRectF(x, y, w / 4.0, h));
+            break;
+        case 0x258F: // Left 1/8
+            painter->drawRect(QRectF(x, y, w / 8.0, h));
+            break;
+        case 0x2590: // Right half block ▐
+            painter->drawRect(QRectF(x + w / 2.0, y, w / 2.0, h));
+            break;
+        case 0x2591: { // Light shade ░ (25% opacity)
+            QColor c = fgColor;
+            c.setAlphaF(0.25);
+            painter->setBrush(c);
+            painter->drawRect(cellRect);
+            break;
+        }
+        case 0x2592: { // Medium shade ▒ (50% opacity)
+            QColor c = fgColor;
+            c.setAlphaF(0.50);
+            painter->setBrush(c);
+            painter->drawRect(cellRect);
+            break;
+        }
+        case 0x2593: { // Dark shade ▓ (75% opacity)
+            QColor c = fgColor;
+            c.setAlphaF(0.75);
+            painter->setBrush(c);
+            painter->drawRect(cellRect);
+            break;
+        }
+        case 0x2594: // Upper 1/8
+            painter->drawRect(QRectF(x, y, w, h / 8.0));
+            break;
+        case 0x2595: // Right 1/8
+            painter->drawRect(QRectF(x + w * 7.0/8.0, y, w / 8.0, h));
+            break;
+        default:
+            painter->restore();
+            return false;
+    }
+
+    painter->restore();
+    return true;
 }
 
 void Terminal::paint(QPainter *painter) {
@@ -522,22 +823,25 @@ void Terminal::paint(QPainter *painter) {
 
             uint32_t cp = cell.chars[0];
             if (cp != 0 && cp != ' ') {
-                painter->setPen(fgVal);
+                if (!drawCustomBlockElement(painter, cp, cellRect, fgVal) &&
+                    !drawCustomBoxDrawing(painter, cp, cellRect, fgVal)) {
+                    painter->setPen(fgVal);
 
-                QFont cellFont = font;
-                cellFont.setBold(cell.attrs.bold);
-                cellFont.setUnderline(cell.attrs.underline != VTERM_UNDERLINE_OFF);
-                cellFont.setItalic(cell.attrs.italic);
-                painter->setFont(cellFont);
+                    QFont cellFont = font;
+                    cellFont.setBold(cell.attrs.bold);
+                    cellFont.setUnderline(cell.attrs.underline != VTERM_UNDERLINE_OFF);
+                    cellFont.setItalic(cell.attrs.italic);
+                    painter->setFont(cellFont);
 
-                int len = 0;
-                while (len < VTERM_MAX_CHARS_PER_CELL && cell.chars[len] != 0) {
-                    len++;
+                    int len = 0;
+                    while (len < VTERM_MAX_CHARS_PER_CELL && cell.chars[len] != 0) {
+                        len++;
+                    }
+
+                    QString charStr = QString::fromUcs4(reinterpret_cast<const char32_t*>(cell.chars), len);
+                    QPointF textPos(cellRect.left(), cellRect.top() + ascent);
+                    painter->drawText(textPos, charStr);
                 }
-
-                QString charStr = QString::fromUcs4(reinterpret_cast<const char32_t*>(cell.chars), len);
-                QPointF textPos(cellRect.left(), cellRect.top() + ascent);
-                painter->drawText(textPos, charStr);
             }
 
             if (isCellSelected(x, virtualY)) {
@@ -561,11 +865,11 @@ void Terminal::paint(QPainter *painter) {
                     }
                 }
 
-                if (hasChar) {
-                    QColor cursorColor("#5e6366");
-                    painter->fillRect(cursorRect, cursorColor);
+                QColor cursorColor(m_colorMap[7]);
+                painter->fillRect(cursorRect, cursorColor);
 
-                    painter->setPen(QColor("#ffffff"));
+                if (hasChar) {
+                    painter->setPen(QColor(m_colorMap[0]));
                     QFont cellFont = font;
                     cellFont.setBold(cell.attrs.bold);
                     cellFont.setUnderline(cell.attrs.underline != VTERM_UNDERLINE_OFF);
@@ -579,9 +883,6 @@ void Terminal::paint(QPainter *painter) {
                     QString charStr = QString::fromUcs4(reinterpret_cast<const char32_t*>(cell.chars), len);
                     QPointF textPos(cursorRect.left(), cursorRect.top() + ascent);
                     painter->drawText(textPos, charStr);
-                } else {
-                    QColor cursorColor("#ffffff");
-                    painter->fillRect(cursorRect, cursorColor);
                 }
             } else {
                 QPen outlinePen(QColor(m_colorMap[7]), 1);

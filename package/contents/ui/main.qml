@@ -7,13 +7,12 @@ import "."
 
 WallpaperItem {
     id: root
-    width: 1920
-    height: 1080
     focus: true
 
     // Font and size configuration
     property string fontName: (root.configuration && root.configuration.FontName) ? root.configuration.FontName : "Monospace"
     property int fontSize: (root.configuration && root.configuration.FontSize) ? root.configuration.FontSize : 13
+    property bool showScrollbar: root.configuration ? root.configuration.ShowScrollbar : false
     
     // Dynamic panel padding offsets (automatically updated by Screen geometry, overridden by user config)
     property int leftPadding: (root.configuration && root.configuration.PaddingLeft > 0) ? root.configuration.PaddingLeft : (root.Screen.desktopAvailableLeft !== undefined ? root.Screen.desktopAvailableLeft : 0)
@@ -35,14 +34,13 @@ WallpaperItem {
         color: Kirigami.Theme.backgroundColor
     }
 
-    // Native C++ Terminal is the visual display element
     Terminal {
         id: terminalBackend
         anchors.fill: parent
         anchors.topMargin: root.topPadding
         anchors.bottomMargin: root.bottomPadding
         anchors.leftMargin: root.leftPadding
-        anchors.rightMargin: root.rightPadding
+        anchors.rightMargin: root.rightPadding + (scrollbar.visible ? scrollbar.width : 0)
         
         fontName: root.fontName
         fontSize: root.fontSize
@@ -50,10 +48,39 @@ WallpaperItem {
         
         Component.onCompleted: {
             console.log("Terminal Wallpaper Debug Geometry:");
+            console.log(" - root.configuration.ShowScrollbar: " + (root.configuration ? root.configuration.ShowScrollbar : "null"));
+            console.log(" - root.showScrollbar: " + root.showScrollbar);
             console.log(" - root size: " + root.width + "x" + root.height);
             console.log(" - Screen desktopAvailable: " + root.Screen.desktopAvailableX + "," + root.Screen.desktopAvailableY + " " + root.Screen.desktopAvailableWidth + "x" + root.Screen.desktopAvailableHeight);
             console.log(" - Paddings -> Left: " + root.leftPadding + ", Top: " + root.topPadding + ", Right: " + root.rightPadding + ", Bottom: " + root.bottomPadding);
             sendTheme();
+        }
+    }
+
+    ScrollBar {
+        id: scrollbar
+        anchors.top: terminalBackend.top
+        anchors.bottom: terminalBackend.bottom
+        anchors.right: parent.right
+        anchors.rightMargin: root.rightPadding
+        
+        policy: root.showScrollbar ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+        visible: policy === ScrollBar.AsNeeded && terminalBackend.historySize > 0 && !terminalBackend.useAltScreen
+        
+        minimumSize: 0.05
+        size: terminalBackend.rows / (terminalBackend.historySize + terminalBackend.rows)
+        position: terminalBackend.historySize > 0 ? (1.0 - size) * (1.0 - (terminalBackend.scrollOffset / terminalBackend.historySize)) : 0.0
+        
+        onPositionChanged: {
+            if (active && terminalBackend.historySize > 0) {
+                var range = 1.0 - size;
+                if (range > 0) {
+                    var pct = 1.0 - (position / range);
+                    pct = Math.max(0.0, Math.min(1.0, pct));
+                    var offset = Math.round(pct * terminalBackend.historySize);
+                    terminalBackend.scrollOffset = offset;
+                }
+            }
         }
     }
 
@@ -222,6 +249,7 @@ WallpaperItem {
         MouseArea {
             id: terminalMouseArea
             anchors.fill: parent
+            anchors.rightMargin: scrollbar.visible ? scrollbar.width : 0
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             cursorShape: {

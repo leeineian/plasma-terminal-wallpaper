@@ -12,6 +12,7 @@ Item {
     property alias cfg_PaddingRight: rightSpin.value
     property alias cfg_PaddingTop: topSpin.value
     property alias cfg_PaddingBottom: bottomSpin.value
+    property alias cfg_ShowScrollbar: scrollbarCheckbox.checked
 
     Kirigami.FormLayout {
         anchors.fill: parent
@@ -55,6 +56,12 @@ Item {
             from: 0
             to: 500
             Kirigami.FormData.label: "Padding Bottom (px):"
+        }
+
+        CheckBox {
+            id: scrollbarCheckbox
+            Kirigami.FormData.label: "Scrollbar:"
+            text: "Show scrollbar on the right"
         }
     }
 }
